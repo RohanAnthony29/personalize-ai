@@ -28,6 +28,7 @@ class FeatureContractTests(unittest.TestCase):
             "watermark_ms": 2,
             "row_counts": {"user": 1},
             "format": "parquet",
+            "snapshot_type": "delta",
             "incremental": True,
             "parent_version": None,
         }

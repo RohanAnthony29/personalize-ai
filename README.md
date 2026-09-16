@@ -171,9 +171,11 @@ The repository now contains two Spark stages:
    `sql/` and writes immutable user, item, and user-item interaction snapshots.
 
 Both jobs use monotonically increasing event-time watermarks. Incremental runs
-only consume events newer than the previous successful run, link each manifest
-to its parent version, refuse to overwrite a version, and update state only after
-all outputs succeed.
+produce immutable delta versions containing only events newer than the previous
+successful run, link each manifest to its parent version, refuse to overwrite a
+version, and update state only after all outputs succeed. Online publication is
+restricted to a validated `snapshot_type=full` build so an incomplete delta can
+never replace the active feature set.
 
 Run the feature pipeline with local Spark or the Spark container:
 
@@ -188,6 +190,9 @@ make publish-features FEATURE_VERSION_PATH=data/features/20260916T120000Z
 keys, and nonnegative recency. A version must have a passing `_quality.json`
 before `publish_online_features.py` will atomically switch the active Redis
 feature version.
+
+Spark 3.5 requires Java 17. The Spark Dockerfile installs the compatible runtime;
+when running directly, set `JAVA_HOME` to an OpenJDK 17 installation.
 
 ## Real-time serving and operations
 

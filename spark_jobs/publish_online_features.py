@@ -18,6 +18,10 @@ def main() -> None:
     quality = json.loads((root / "_quality.json").read_text())
     if not quality.get("passed"):
         raise SystemExit("Refusing to publish a feature version that failed quality checks")
+    if manifest.get("snapshot_type") != "full":
+        raise SystemExit(
+            "Refusing to activate an incremental delta. Compact/rebuild a full snapshot first."
+        )
     version = manifest["feature_version"]
 
     from pyspark.sql import SparkSession

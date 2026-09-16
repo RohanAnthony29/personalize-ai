@@ -88,6 +88,7 @@ def main() -> None:
         "feature_version": version,
         "created_at_utc": datetime.now(timezone.utc).isoformat(),
         "format": "parquet",
+        "snapshot_type": "delta" if args.incremental else "full",
         "input_paths": args.input,
         "incremental": args.incremental,
         "parent_version": state.latest_version if args.incremental else None,

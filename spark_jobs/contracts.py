@@ -39,7 +39,7 @@ def render_sql(path: Path, source_view: str, as_of_ms: int) -> str:
 
 def validate_manifest(manifest: dict) -> list[str]:
     failures = []
-    for field in ("feature_version", "watermark_ms", "row_counts", "format"):
+    for field in ("feature_version", "watermark_ms", "row_counts", "format", "snapshot_type"):
         if field not in manifest:
             failures.append(f"missing manifest field: {field}")
     for name, count in manifest.get("row_counts", {}).items():
@@ -47,4 +47,6 @@ def validate_manifest(manifest: dict) -> list[str]:
             failures.append(f"invalid row count for {name}: {count!r}")
     if manifest.get("incremental") and not manifest.get("parent_version"):
         failures.append("incremental snapshot must identify parent_version")
+    if manifest.get("snapshot_type") not in {"full", "delta"}:
+        failures.append("snapshot_type must be full or delta")
     return failures
