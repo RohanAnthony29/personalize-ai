@@ -1,0 +1,22 @@
+# Raw and generated data
+data/raw/*
+!data/raw/.gitkeep
+data/processed/
+data/reports/
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+
+# Experiments and local services
+mlruns/
+artifacts/*
+!artifacts/.gitkeep
+.env
+
+# Editors and operating systems
+.DS_Store
+.idea/
+.vscode/
