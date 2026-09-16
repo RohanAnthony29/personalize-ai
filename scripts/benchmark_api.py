@@ -7,6 +7,7 @@ import json
 import statistics
 import time
 import urllib.request
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -26,14 +27,22 @@ def request_ms(url: str) -> float:
     return (time.perf_counter() - started) * 1000
 
 
-def summarize(values: list[float]) -> dict[str, float]:
+def summarize(values: list[float], wall_seconds: float) -> dict[str, float]:
     return {
         "requests": len(values),
         "mean_ms": statistics.fmean(values),
         "p50_ms": percentile(values, 0.50),
         "p95_ms": percentile(values, 0.95),
         "p99_ms": percentile(values, 0.99),
+        "throughput_requests_per_second": len(values) / wall_seconds,
     }
+
+
+def run_load(urls: list[str], concurrency: int) -> tuple[list[float], float]:
+    started = time.perf_counter()
+    with ThreadPoolExecutor(max_workers=concurrency) as executor:
+        values = list(executor.map(request_ms, urls))
+    return values, time.perf_counter() - started
 
 
 def main() -> None:
@@ -41,17 +50,24 @@ def main() -> None:
     parser.add_argument("--base-url", default="http://localhost:8000")
     parser.add_argument("--user-id", type=int, default=1)
     parser.add_argument("--requests", type=int, default=100)
+    parser.add_argument("--concurrency", type=int, default=10)
     parser.add_argument("--output", default="data/reports/latency_benchmark.json")
     args = parser.parse_args()
     endpoint = f"{args.base_url}/v1/recommendations"
     request_ms(f"{endpoint}/{args.user_id}")
-    cached = [request_ms(f"{endpoint}/{args.user_id}") for _ in range(args.requests)]
-    uncached = [request_ms(f"{endpoint}/{args.user_id + i + 1}") for i in range(args.requests)]
+    cached, cached_wall = run_load(
+        [f"{endpoint}/{args.user_id}"] * args.requests, args.concurrency
+    )
+    uncached, uncached_wall = run_load(
+        [f"{endpoint}/{args.user_id + i + 1}" for i in range(args.requests)],
+        args.concurrency,
+    )
     report = {
         "created_at_utc": datetime.now(timezone.utc).isoformat(),
         "base_url": args.base_url,
-        "cached": summarize(cached),
-        "uncached": summarize(uncached),
+        "concurrency": args.concurrency,
+        "cached": summarize(cached, cached_wall),
+        "uncached": summarize(uncached, uncached_wall),
     }
     report["p95_cache_improvement_pct"] = (
         100 * (1 - report["cached"]["p95_ms"] / report["uncached"]["p95_ms"])

@@ -30,6 +30,7 @@ class ServingAPITests(unittest.TestCase):
         self.assertEqual(first.status_code, 200)
         self.assertEqual(first.json()["feature_version"], "v-test")
         self.assertEqual(first.json()["cache"], "miss")
+        self.assertEqual(first.json()["ranking_mode"], "champion")
         self.assertEqual(second.json()["cache"], "hit")
         self.assertEqual(second.json()["recommendations"][0]["item_id"], 2)
 

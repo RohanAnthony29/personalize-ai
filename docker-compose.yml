@@ -3,6 +3,7 @@ services:
     image: redis:7.4-alpine
     command: ["redis-server", "--appendonly", "yes", "--maxmemory", "512mb", "--maxmemory-policy", "allkeys-lru"]
     volumes: ["redis-data:/data"]
+    ports: ["6379:6379"]
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
@@ -14,8 +15,12 @@ services:
     environment:
       REDIS_URL: redis://redis:6379/0
       ARTIFACT_DIR: /app/artifacts
+      MODEL_PATH: /app/artifacts/bpr_ranker.pt
+      RANKING_MODE: champion
       MLFLOW_TRACKING_URI: http://mlflow:5000
     ports: ["8000:8000"]
+    volumes:
+      - ./artifacts:/app/artifacts:ro
     depends_on:
       redis: {condition: service_healthy}
 

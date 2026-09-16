@@ -15,3 +15,9 @@ CACHE = Counter("recommendation_cache_total", "Cache outcomes", ["outcome"])
 RECOMMENDATION_COUNT = Histogram(
     "recommendation_result_count", "Number of recommendations returned", buckets=(0, 1, 5, 10, 20, 50, 100)
 )
+CHALLENGER_LATENCY = Histogram(
+    "challenger_scoring_seconds", "PyTorch challenger scoring latency"
+)
+CHALLENGER_LOADED = Counter(
+    "challenger_load_total", "Challenger model load outcomes", ["outcome"]
+)

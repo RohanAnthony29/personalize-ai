@@ -59,10 +59,32 @@ class ServingTests(unittest.TestCase):
         store = DictionaryFeatureStore("20260916T120000Z", users, items)
         with tempfile.TemporaryDirectory() as directory:
             recommender = HybridRecommender(store, Path(directory))
-            values, version = recommender.recommend(7, 2)
+            values, version, metadata = recommender.recommend(7, 2)
         self.assertEqual(version, "20260916T120000Z")
         self.assertEqual([row["item_id"] for row in values], [3, 4])
         self.assertTrue(all(row["item_id"] not in {1, 2} for row in values))
+        self.assertEqual(metadata["ranking_mode"], "champion")
+
+    def test_challenger_can_shadow_score_or_control_order(self):
+        class ReverseRanker:
+            model_version = "fake-v1"
+
+            def score(self, candidates, history, features):
+                return [float(item) for item in candidates]
+
+        store = DictionaryFeatureStore(
+            "v1",
+            {1: {"recent_items": []}},
+            {2: {"weighted_popularity": 10}, 3: {"weighted_popularity": 5}},
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            challenger = HybridRecommender(
+                store, Path(directory), ReverseRanker(), ranking_mode="challenger"
+            )
+            values, _, metadata = challenger.recommend(1, 2)
+        self.assertEqual([value["item_id"] for value in values], [3, 2])
+        self.assertTrue(metadata["challenger_loaded"])
+        self.assertEqual(metadata["model_version"], "fake-v1")
 
 
 if __name__ == "__main__":
