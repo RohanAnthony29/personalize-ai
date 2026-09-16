@@ -24,19 +24,19 @@ while reciprocal-rank-fusion retrieval remains the production champion.
   `20260916-full`.
 - FastAPI: hybrid champion with `bpr_ranker.pt` loaded for shadow scoring.
 - Docker services: Redis, FastAPI, MLflow, and Prometheus.
-- Automated tests: 35/35 passed.
+- Automated tests: 38/38 passed.
 
 ## Latency benchmark
 
-The benchmark used 100 requests per cohort at concurrency 10 against the
-populated Docker stack.
+The benchmark used five repetitions of 50 requests per cohort at concurrency 10
+against the populated Docker stack. Confidence intervals describe variation in
+the per-repetition p95 measurement.
 
-| Path | Mean | p50 | p95 | p99 | Throughput |
-|---|---:|---:|---:|---:|---:|
-| Redis-cached | 33.42 ms | 33.03 ms | 60.77 ms | 74.33 ms | 281.96 req/s |
-| Uncached | 71.58 ms | 72.01 ms | 97.81 ms | 105.57 ms | 137.51 req/s |
+| Path | Mean | p50 | p95 | p95 95% CI | p99 | Throughput |
+|---|---:|---:|---:|---:|---:|---:|
+| Redis-cached | 24.36 ms | 21.94 ms | 41.38 ms | 26.15–48.29 ms | 52.09 ms | 376.68 req/s |
+| Uncached | 67.27 ms | 66.14 ms | 102.42 ms | 73.42–114.66 ms | 120.25 ms | 139.59 req/s |
 
-Caching reduced measured p95 latency by **37.87%**. These numbers describe this
+Caching reduced measured p95 latency by **59.60%**. These numbers describe this
 specific Codespace run; rerun `scripts/benchmark_api.py` for each deployment
 environment rather than treating them as universal performance guarantees.
-

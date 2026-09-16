@@ -1,5 +1,5 @@
 {
-  "measured_at_utc": "2026-09-16T21:59:50.139037+00:00",
+  "measured_at_utc": "2026-09-16T22:39:53Z",
   "environment": "GitHub Codespace, free-tier 2-core machine",
   "feature_snapshot": {
     "version": "20260916-full",
@@ -32,22 +32,26 @@
     "conclusion": "challenger retained in shadow mode; promotion gate not met"
   },
   "latency": {
-    "requests_per_cohort": 100,
+    "requests_per_repetition": 50,
+    "repetitions": 5,
+    "requests_per_cohort": 250,
     "concurrency": 10,
     "cached": {
-      "mean_ms": 33.41828539000744,
-      "p50_ms": 33.034401999429974,
-      "p95_ms": 60.7688849956112,
-      "p99_ms": 74.32690000041475,
-      "throughput_requests_per_second": 281.9563640443291
+      "mean_ms": 24.361753916015005,
+      "p50_ms": 21.941826000329456,
+      "p95_ms": 41.37667499981035,
+      "p95_ms_95ci_across_repetitions": [26.152696597858984, 48.28739300151593],
+      "p99_ms": 52.091051999923366,
+      "throughput_requests_per_second": 376.68011611553436
     },
     "uncached": {
-      "mean_ms": 71.58237616995393,
-      "p50_ms": 72.010789000016,
-      "p95_ms": 97.80996500012407,
-      "p99_ms": 105.5724440000245,
-      "throughput_requests_per_second": 137.51278923942795
+      "mean_ms": 67.27176991197484,
+      "p50_ms": 66.13743900015834,
+      "p95_ms": 102.4205269999459,
+      "p95_ms_95ci_across_repetitions": [73.42265112284396, 114.661543276718],
+      "p99_ms": 120.2526389997729,
+      "throughput_requests_per_second": 139.5913599608028
     },
-    "p95_cache_improvement_pct": 37.87045624698461
+    "p95_cache_improvement_pct": 59.601189124935736
   }
 }
