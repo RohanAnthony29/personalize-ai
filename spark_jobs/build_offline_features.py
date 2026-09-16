@@ -12,9 +12,12 @@ import json
 from datetime import datetime, timezone
 from pathlib import Path
 
+from contracts import IncrementalState, render_sql, validate_manifest
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
     parser.add_argument("--input", nargs="+", default=["data/processed/events_train.csv"])
+    parser.add_argument("--input-format", choices=("csv", "parquet"), default="csv")
     parser.add_argument("--output", default="data/features")
     parser.add_argument("--version", help="Immutable feature version; defaults to UTC timestamp")
     parser.add_argument("--incremental", action="store_true")
@@ -22,17 +25,6 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--sql-dir", default="sql")
     parser.add_argument("--partitions", type=int, default=8)
     return parser.parse_args()
-
-
-def read_json(path: Path, default: dict) -> dict:
-    if not path.exists():
-        return default
-    return json.loads(path.read_text())
-
-
-def render_sql(path: Path, as_of_ms: int) -> str:
-    return (path.read_text().replace("{{source_view}}", "events")
-            .replace("{{as_of_ms}}", str(as_of_ms)))
 
 
 def main() -> None:
@@ -51,8 +43,8 @@ def main() -> None:
     if version_path.exists():
         raise SystemExit(f"Refusing to overwrite immutable version: {version_path}")
 
-    state = read_json(state_path, {"watermark_ms": -1, "latest_version": None})
-    prior_watermark = int(state["watermark_ms"]) if args.incremental else -1
+    state = IncrementalState.load(state_path)
+    prior_watermark = state.watermark_ms if args.incremental else -1
     schema = T.StructType([
         T.StructField("timestamp", T.LongType(), False),
         T.StructField("user_id", T.LongType(), False),
@@ -62,7 +54,10 @@ def main() -> None:
         T.StructField("transaction_id", T.StringType(), True),
     ])
     spark = SparkSession.builder.appName("personalize-offline-features").getOrCreate()
-    events = spark.read.option("header", True).schema(schema).csv(args.input)
+    if args.input_format == "parquet":
+        events = spark.read.parquet(*args.input).select(*schema.fieldNames())
+    else:
+        events = spark.read.option("header", True).schema(schema).csv(args.input)
     events = events.filter(F.col("timestamp") > prior_watermark)
     invalid = events.filter(
         F.col("user_id").isNull() | F.col("item_id").isNull() |
@@ -80,7 +75,9 @@ def main() -> None:
     events.createOrReplaceTempView("events")
     counts = {}
     for entity in ("user", "item", "interaction"):
-        frame = spark.sql(render_sql(Path(args.sql_dir) / f"{entity}_features.sql", as_of_ms))
+        frame = spark.sql(render_sql(
+            Path(args.sql_dir) / f"{entity}_features.sql", "events", as_of_ms
+        ))
         counts[entity] = frame.count()
         frame.repartition(args.partitions).write.mode("errorifexists").parquet(
             str(version_path / f"{entity}_features")
@@ -93,16 +90,18 @@ def main() -> None:
         "format": "parquet",
         "input_paths": args.input,
         "incremental": args.incremental,
-        "parent_version": state.get("latest_version") if args.incremental else None,
+        "parent_version": state.latest_version if args.incremental else None,
         "prior_watermark_ms": prior_watermark,
         "watermark_ms": as_of_ms,
         "input_event_count": input_count,
         "row_counts": counts,
     }
     version_path.mkdir(parents=True, exist_ok=True)
+    failures = validate_manifest(manifest)
+    if failures:
+        raise ValueError("; ".join(failures))
     (version_path / "_manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")
-    state_path.parent.mkdir(parents=True, exist_ok=True)
-    state_path.write_text(json.dumps({"watermark_ms": as_of_ms, "latest_version": version}, indent=2) + "\n")
+    IncrementalState(as_of_ms, version).dump(state_path)
     print(json.dumps(manifest, indent=2))
     spark.stop()
 

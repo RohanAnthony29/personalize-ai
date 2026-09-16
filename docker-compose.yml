@@ -1,0 +1,48 @@
+services:
+  redis:
+    image: redis:7.4-alpine
+    command: ["redis-server", "--appendonly", "yes", "--maxmemory", "512mb", "--maxmemory-policy", "allkeys-lru"]
+    volumes: ["redis-data:/data"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  api:
+    build: .
+    environment:
+      REDIS_URL: redis://redis:6379/0
+      ARTIFACT_DIR: /app/artifacts
+      MLFLOW_TRACKING_URI: http://mlflow:5000
+    ports: ["8000:8000"]
+    depends_on:
+      redis: {condition: service_healthy}
+
+  mlflow:
+    build: .
+    command: ["mlflow", "server", "--host", "0.0.0.0", "--port", "5000", "--backend-store-uri", "sqlite:////mlflow/mlflow.db", "--default-artifact-root", "/mlflow/artifacts"]
+    ports: ["5000:5000"]
+    volumes: ["mlflow-data:/mlflow"]
+
+  prometheus:
+    image: prom/prometheus:v3.4.1
+    command: ["--config.file=/etc/prometheus/prometheus.yml"]
+    ports: ["9090:9090"]
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    depends_on: [api]
+
+  spark:
+    profiles: ["features"]
+    build:
+      context: .
+      dockerfile: Dockerfile.spark
+    volumes:
+      - ./data:/app/data
+      - ./sql:/app/sql:ro
+    command: ["spark_jobs/build_offline_features.py", "--input", "data/processed/events_train.csv"]
+
+volumes:
+  redis-data:
+  mlflow-data:

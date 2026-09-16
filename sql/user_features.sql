@@ -7,6 +7,18 @@ SELECT
     SUM(CASE WHEN event_type = 'transaction' THEN 1 ELSE 0 END) AS transaction_count,
     SUM(event_weight) AS weighted_event_sum,
     MAX(timestamp) AS last_event_timestamp,
+    SLICE(
+        SORT_ARRAY(
+            COLLECT_LIST(NAMED_STRUCT(
+                'timestamp', timestamp,
+                'item_id', item_id,
+                'event_weight', event_weight
+            )),
+            FALSE
+        ),
+        1,
+        50
+    ) AS recent_items,
     DATEDIFF(
         FROM_UNIXTIME(CAST({{as_of_ms}} / 1000 AS BIGINT)),
         FROM_UNIXTIME(CAST(MAX(timestamp) / 1000 AS BIGINT))

@@ -11,6 +11,9 @@ dependencies = ["numpy>=2.0", "torch>=2.2"]
 
 [project.optional-dependencies]
 dev = ["pytest>=8.0"]
+serving = ["fastapi>=0.115", "uvicorn>=0.34", "redis>=6.0", "prometheus-client>=0.22"]
+spark = ["pyspark>=3.5,<4", "redis>=6.0"]
+tracking = ["mlflow>=3.1"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

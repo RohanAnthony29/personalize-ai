@@ -1,4 +1,4 @@
-.PHONY: profile split baseline cooccurrence categories hybrid rolling-examples temporal-folds ranker listwise-ranker diagnose-ranker test
+.PHONY: profile split baseline cooccurrence categories hybrid rolling-examples temporal-folds ranker listwise-ranker diagnose-ranker ingest features quality publish-features serve benchmark stack test
 
 profile:
 	python3 scripts/profile_data.py --data-dir data/raw --output data/reports/data_profile.json
@@ -33,5 +33,26 @@ diagnose-ranker:
 listwise-ranker:
 	.venv/bin/python scripts/train_listwise_ranker.py
 
+ingest:
+	python3 spark_jobs/ingest_events.py
+
+features:
+	python3 spark_jobs/build_offline_features.py
+
+quality:
+	python3 spark_jobs/validate_features.py $(FEATURE_VERSION_PATH)
+
+publish-features:
+	python3 spark_jobs/publish_online_features.py $(FEATURE_VERSION_PATH) --redis-url $${REDIS_URL:-redis://localhost:6379/0}
+
+serve:
+	PYTHONPATH=src uvicorn personalize_ai.main:app --reload
+
+benchmark:
+	python3 scripts/benchmark_api.py
+
+stack:
+	docker compose up --build
+
 test:
-	.venv/bin/python -m unittest discover -s tests -v
+	PYTHONPATH=src:. .venv/bin/python -m unittest discover -s tests -v

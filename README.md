@@ -161,11 +161,69 @@ optimizes the complete ranked list rather than sampled positive-negative pairs.
 .venv/bin/python -m unittest discover -s tests -v
 ```
 
-## Roadmap
+## Production feature platform
 
-1. Validate and profile raw interactions.
-2. Create chronological train, validation, and test splits.
-3. Establish popularity and item-to-item baselines.
-4. Train PyTorch retrieval and ranking models.
-5. Serve recommendations with FastAPI and Redis.
-6. Track experiments and package the stack with MLflow and Docker.
+The repository now contains two Spark stages:
+
+1. `spark_jobs/ingest_events.py` validates, deduplicates, and partitions raw
+   Retailrocket events into immutable bronze Parquet versions.
+2. `spark_jobs/build_offline_features.py` executes the transformations in
+   `sql/` and writes immutable user, item, and user-item interaction snapshots.
+
+Both jobs use monotonically increasing event-time watermarks. Incremental runs
+only consume events newer than the previous successful run, link each manifest
+to its parent version, refuse to overwrite a version, and update state only after
+all outputs succeed.
+
+Run the feature pipeline with local Spark or the Spark container:
+
+```bash
+make ingest
+make features
+make quality FEATURE_VERSION_PATH=data/features/20260916T120000Z
+make publish-features FEATURE_VERSION_PATH=data/features/20260916T120000Z
+```
+
+`validate_features.py` checks manifest counts, primary-key uniqueness, non-null
+keys, and nonnegative recency. A version must have a passing `_quality.json`
+before `publish_online_features.py` will atomically switch the active Redis
+feature version.
+
+## Real-time serving and operations
+
+FastAPI reads the active versioned user and item features from Redis, retrieves
+hybrid co-occurrence/session candidates, filters seen products, and uses offline
+weighted popularity as a cold-start fallback. Recommendation results use a
+version-aware Redis cache so activating a new feature version cannot return stale
+rankings.
+
+Start the free local stack:
+
+```bash
+docker compose up --build
+```
+
+Services:
+
+- API and OpenAPI: `http://localhost:8000/docs`
+- Prometheus metrics: `http://localhost:8000/metrics`
+- Prometheus server: `http://localhost:9090`
+- MLflow tracking: `http://localhost:5000`
+- Redis: internal port `6379`
+
+Import existing experiment reports into MLflow:
+
+```bash
+python3 scripts/log_experiments_mlflow.py --tracking-uri http://localhost:5000
+```
+
+Measure cached and uncached end-to-end latency:
+
+```bash
+make benchmark
+```
+
+The benchmark reports mean, p50, p95, and p99 latency plus the measured p95
+cache improvement to `data/reports/latency_benchmark.json`. No performance claim
+should be made until this benchmark has been run against a populated feature
+snapshot.
