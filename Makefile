@@ -1,4 +1,4 @@
-.PHONY: profile split baseline cooccurrence categories hybrid rolling-examples temporal-folds ranker listwise-ranker diagnose-ranker ingest features quality publish-features serve benchmark stack test
+.PHONY: profile split baseline cooccurrence categories hybrid rolling-examples temporal-folds ranker listwise-ranker diagnose-ranker ingest features quality publish-features serve benchmark stack restart-platform test
 
 profile:
 	python3 scripts/profile_data.py --data-dir data/raw --output data/reports/data_profile.json
@@ -49,10 +49,13 @@ serve:
 	PYTHONPATH=src uvicorn personalize_ai.main:app --reload
 
 benchmark:
-	python3 scripts/benchmark_api.py
+	python3 scripts/benchmark_api.py --repetitions 5 --api-key $${API_KEY:-codespace-demo-key}
 
 stack:
 	docker compose up --build
+
+restart-platform:
+	./scripts/restart_platform.sh
 
 test:
 	PYTHONPATH=src:. .venv/bin/python -m unittest discover -s tests -v

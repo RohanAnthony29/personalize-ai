@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import statistics
 import time
 import urllib.request
@@ -18,9 +19,12 @@ def percentile(values: list[float], fraction: float) -> float:
     return ordered[index]
 
 
-def request_ms(url: str) -> float:
+def request_ms(url: str, api_key: str = "") -> float:
     started = time.perf_counter()
-    with urllib.request.urlopen(url, timeout=10) as response:
+    request = urllib.request.Request(url)
+    if api_key:
+        request.add_header("X-API-Key", api_key)
+    with urllib.request.urlopen(request, timeout=10) as response:
         if response.status != 200:
             raise RuntimeError(f"HTTP {response.status}")
         response.read()
@@ -38,11 +42,21 @@ def summarize(values: list[float], wall_seconds: float) -> dict[str, float]:
     }
 
 
-def run_load(urls: list[str], concurrency: int) -> tuple[list[float], float]:
+def run_load(urls: list[str], concurrency: int, api_key: str) -> tuple[list[float], float]:
     started = time.perf_counter()
     with ThreadPoolExecutor(max_workers=concurrency) as executor:
-        values = list(executor.map(request_ms, urls))
+        values = list(executor.map(lambda url: request_ms(url, api_key), urls))
     return values, time.perf_counter() - started
+
+
+def confidence_interval_95(values: list[float]) -> list[float]:
+    if len(values) < 2:
+        value = values[0] if values else 0.0
+        return [value, value]
+    critical = {2: 12.706, 3: 4.303, 4: 3.182, 5: 2.776}.get(len(values), 1.96)
+    mean = statistics.fmean(values)
+    margin = critical * statistics.stdev(values) / math.sqrt(len(values))
+    return [mean - margin, mean + margin]
 
 
 def main() -> None:
@@ -51,24 +65,56 @@ def main() -> None:
     parser.add_argument("--user-id", type=int, default=1)
     parser.add_argument("--requests", type=int, default=100)
     parser.add_argument("--concurrency", type=int, default=10)
+    parser.add_argument("--repetitions", type=int, default=5)
+    parser.add_argument("--api-key", default="")
     parser.add_argument("--output", default="data/reports/latency_benchmark.json")
     args = parser.parse_args()
     endpoint = f"{args.base_url}/v1/recommendations"
-    request_ms(f"{endpoint}/{args.user_id}")
-    cached, cached_wall = run_load(
-        [f"{endpoint}/{args.user_id}"] * args.requests, args.concurrency
-    )
-    uncached, uncached_wall = run_load(
-        [f"{endpoint}/{args.user_id + i + 1}" for i in range(args.requests)],
-        args.concurrency,
-    )
+    if args.repetitions < 2:
+        raise SystemExit("--repetitions must be at least 2 for a confidence interval")
+    request_ms(f"{endpoint}/{args.user_id}", args.api_key)
+    cached, uncached = [], []
+    cached_wall = uncached_wall = 0.0
+    repetitions = []
+    for repetition in range(args.repetitions):
+        cached_values, cached_elapsed = run_load(
+            [f"{endpoint}/{args.user_id}"] * args.requests,
+            args.concurrency,
+            args.api_key,
+        )
+        offset = repetition * args.requests
+        uncached_values, uncached_elapsed = run_load(
+            [f"{endpoint}/{args.user_id + offset + i + 1}" for i in range(args.requests)],
+            args.concurrency,
+            args.api_key,
+        )
+        cached.extend(cached_values)
+        uncached.extend(uncached_values)
+        cached_wall += cached_elapsed
+        uncached_wall += uncached_elapsed
+        repetitions.append(
+            {
+                "repetition": repetition + 1,
+                "cached": summarize(cached_values, cached_elapsed),
+                "uncached": summarize(uncached_values, uncached_elapsed),
+            }
+        )
     report = {
         "created_at_utc": datetime.now(timezone.utc).isoformat(),
         "base_url": args.base_url,
         "concurrency": args.concurrency,
+        "requests_per_repetition": args.requests,
+        "repetition_count": args.repetitions,
         "cached": summarize(cached, cached_wall),
         "uncached": summarize(uncached, uncached_wall),
+        "repetitions": repetitions,
     }
+    report["cached"]["p95_ms_95ci_across_repetitions"] = confidence_interval_95(
+        [value["cached"]["p95_ms"] for value in repetitions]
+    )
+    report["uncached"]["p95_ms_95ci_across_repetitions"] = confidence_interval_95(
+        [value["uncached"]["p95_ms"] for value in repetitions]
+    )
     report["p95_cache_improvement_pct"] = (
         100 * (1 - report["cached"]["p95_ms"] / report["uncached"]["p95_ms"])
         if report["uncached"]["p95_ms"] else 0.0

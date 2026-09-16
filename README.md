@@ -202,11 +202,36 @@ weighted popularity as a cold-start fallback. Recommendation results use a
 version-aware Redis cache so activating a new feature version cannot return stale
 rankings.
 
+```mermaid
+flowchart LR
+    A["Retailrocket events"] --> B["Spark ingestion + SQL features"]
+    B --> C["Versioned Parquet snapshot"]
+    C --> D["Redis online feature store"]
+    D --> E["Hybrid candidate generator"]
+    E --> F["FastAPI champion ranking"]
+    E -. shadow scoring .-> G["PyTorch BPR challenger"]
+    F --> H["Recommendation response"]
+    F --> I["Prometheus metrics"]
+    G --> J["MLflow experiments"]
+```
+
 Start the free local stack:
 
 ```bash
 docker compose up --build
 ```
+
+Redis persistence is disabled in the free-tier demo to avoid duplicating the
+1.13 GiB feature snapshot on disk. After a Codespace restart, one command starts
+the services, selects the newest validated full snapshot, republishes it to
+Redis, and verifies the API:
+
+```bash
+make restart-platform
+```
+
+Set `FEATURE_VERSION_PATH=data/features/<version>` to select a specific full
+snapshot. The script uses `.venv/bin/python` when available and expects Java 17.
 
 Services:
 
@@ -215,6 +240,21 @@ Services:
 - Prometheus server: `http://localhost:9090`
 - MLflow tracking: `http://localhost:5000`
 - Redis: internal port `6379`
+
+The Docker demo protects `/v1/*` with an API key and applies a per-process,
+per-key request limit. Override `API_KEY` and
+`RATE_LIMIT_REQUESTS_PER_MINUTE` in the environment for any shared deployment;
+the checked-in key is only a local demo default.
+
+Example requests:
+
+```bash
+curl -H 'X-API-Key: codespace-demo-key' \
+  http://localhost:8000/v1/model
+
+curl -H 'X-API-Key: codespace-demo-key' \
+  'http://localhost:8000/v1/recommendations/257597?count=10'
+```
 
 Import existing experiment reports into MLflow:
 
@@ -228,7 +268,12 @@ Measure cached and uncached end-to-end latency:
 make benchmark
 ```
 
-The benchmark reports mean, p50, p95, and p99 latency plus the measured p95
-cache improvement to `data/reports/latency_benchmark.json`. No performance claim
-should be made until this benchmark has been run against a populated feature
-snapshot.
+The benchmark performs five repetitions and reports mean, p50, p95, and p99
+latency, the measured cache improvement, and a 95% confidence interval for p95
+across repetitions. Results are written to
+`data/reports/latency_benchmark.json`. No performance claim should be made until
+the benchmark has been run against a populated feature snapshot.
+
+See [production evidence](docs/RESULTS.md) for measured relevance and latency,
+and [neural ranker research](docs/NEURAL_RANKER_RESEARCH.md) for the challenger
+promotion decision and next experiments.

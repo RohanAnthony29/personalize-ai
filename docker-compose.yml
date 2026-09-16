@@ -20,6 +20,8 @@ services:
       MODEL_PATH: /app/artifacts/bpr_ranker.pt
       RANKING_MODE: champion
       MLFLOW_TRACKING_URI: http://host.docker.internal:5000
+      API_KEY: ${API_KEY:-codespace-demo-key}
+      RATE_LIMIT_REQUESTS_PER_MINUTE: ${RATE_LIMIT_REQUESTS_PER_MINUTE:-2000}
     extra_hosts:
       - "host.docker.internal:host-gateway"
     ports: ["8000:8000"]

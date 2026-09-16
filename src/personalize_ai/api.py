@@ -1,11 +1,14 @@
 from __future__ import annotations
 
 import os
+import secrets
 import time
+from collections import defaultdict, deque
 from pathlib import Path
+from threading import Lock
 
-from fastapi import FastAPI, HTTPException, Query, Request
-from fastapi.responses import Response
+from fastapi import FastAPI, HTTPException, Path as APIPath, Query, Request
+from fastapi.responses import JSONResponse, Response
 from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 
 from . import __version__
@@ -15,6 +18,15 @@ from .monitoring import CACHE, LATENCY, RECOMMENDATION_COUNT, REQUESTS
 from .monitoring import CHALLENGER_LOADED
 from .ranker import BPRChallenger
 from .recommender import HybridRecommender
+
+
+def _metric_endpoint(request: Request) -> str:
+    route = request.scope.get("route")
+    if route is not None:
+        return getattr(route, "path", request.url.path)
+    if request.url.path.startswith("/v1/recommendations/"):
+        return "/v1/recommendations/{user_id}"
+    return request.url.path
 
 
 def create_app(
@@ -42,6 +54,10 @@ def create_app(
         ranking_mode=os.getenv("RANKING_MODE", "champion"),
     )
     ttl = int(os.getenv("RECOMMENDATION_CACHE_TTL_SECONDS", "300"))
+    api_key = os.getenv("API_KEY", "")
+    rate_limit = max(1, int(os.getenv("RATE_LIMIT_REQUESTS_PER_MINUTE", "600")))
+    rate_windows: dict[str, deque[float]] = defaultdict(deque)
+    rate_lock = Lock()
     app = FastAPI(title="PersonalizeAI", version=__version__)
 
     @app.middleware("http")
@@ -49,15 +65,37 @@ def create_app(
         started = time.perf_counter()
         status = "500"
         try:
+            if request.url.path.startswith("/v1/"):
+                supplied_key = request.headers.get("X-API-Key", "")
+                if api_key and not secrets.compare_digest(supplied_key, api_key):
+                    status = "401"
+                    return JSONResponse(
+                        {"detail": "A valid X-API-Key header is required"},
+                        status_code=401,
+                        headers={"WWW-Authenticate": "ApiKey"},
+                    )
+                identity = supplied_key or (request.client.host if request.client else "unknown")
+                now = time.monotonic()
+                with rate_lock:
+                    window = rate_windows[identity]
+                    while window and window[0] <= now - 60:
+                        window.popleft()
+                    if len(window) >= rate_limit:
+                        status = "429"
+                        return JSONResponse(
+                            {"detail": "Rate limit exceeded"},
+                            status_code=429,
+                            headers={"Retry-After": "60"},
+                        )
+                    window.append(now)
             response = await call_next(request)
             status = str(response.status_code)
             return response
         finally:
-            route = request.scope.get("route")
-            endpoint = getattr(route, "path", request.url.path)
+            endpoint = _metric_endpoint(request)
             REQUESTS.labels(endpoint, status).inc()
             if request.url.path != "/metrics":
-                LATENCY.labels(request.url.path, "unknown").observe(time.perf_counter() - started)
+                LATENCY.labels(endpoint, "unknown").observe(time.perf_counter() - started)
 
     @app.get("/health")
     def health() -> dict:
@@ -68,7 +106,10 @@ def create_app(
             raise HTTPException(status_code=503, detail=str(exc)) from exc
 
     @app.get("/v1/recommendations/{user_id}")
-    def recommendations(user_id: int, count: int = Query(10, ge=1, le=100)) -> dict:
+    def recommendations(
+        user_id: int = APIPath(..., ge=1),
+        count: int = Query(10, ge=1, le=100),
+    ) -> dict:
         version = feature_store.active_version()
         key = f"recommendations:{version}:{recommender.cache_namespace}:{user_id}:{count}"
         started = time.perf_counter()

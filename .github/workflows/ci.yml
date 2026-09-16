@@ -1,0 +1,36 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test-and-build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install --index-url https://download.pytorch.org/whl/cpu torch==2.9.0+cpu
+          python -m pip install -r requirements-serving.txt -r requirements-spark.txt
+          python -m pip install -e . --no-deps
+      - name: Run tests
+        run: PYTHONPATH=src:. python -m unittest discover -s tests -v
+      - name: Validate Compose configuration
+        run: docker compose config --quiet
+      - name: Validate API image build
+        run: docker build -t personalize-ai:test .
