@@ -53,7 +53,9 @@ def create_app(
             status = str(response.status_code)
             return response
         finally:
-            REQUESTS.labels(request.url.path, status).inc()
+            route = request.scope.get("route")
+            endpoint = getattr(route, "path", request.url.path)
+            REQUESTS.labels(endpoint, status).inc()
             if request.url.path != "/metrics":
                 LATENCY.labels(request.url.path, "unknown").observe(time.perf_counter() - started)
 

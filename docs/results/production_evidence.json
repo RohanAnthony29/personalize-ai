@@ -1,0 +1,53 @@
+{
+  "measured_at_utc": "2026-09-16T21:59:50.139037+00:00",
+  "environment": "GitHub Codespace, free-tier 2-core machine",
+  "feature_snapshot": {
+    "version": "20260916-full",
+    "quality_passed": true,
+    "row_counts": {
+      "user": 1218519,
+      "item": 220512,
+      "interaction": 1856768
+    },
+    "redis_keys": 3295803,
+    "redis_memory_gib": 1.13
+  },
+  "candidate_relevance": {
+    "cohort": "untouched chronological test warm users",
+    "users": 580,
+    "hybrid_recall_at_50": 0.10034513140728414,
+    "cooccurrence_recall_at_50": 0.07101639739570773,
+    "relative_recall_at_50_lift_pct": 41.29853820682414,
+    "hybrid_recall_at_100": 0.12267893744798676,
+    "cooccurrence_recall_at_100": 0.09930534743034741,
+    "relative_recall_at_100_lift_pct": 23.53709102526784
+  },
+  "neural_ranker": {
+    "cohort": "retrieved-positive test candidate groups",
+    "groups": 92,
+    "promoted": false,
+    "neural_ndcg_at_10": 0.23516313895918453,
+    "retrieval_ndcg_at_10": 0.23468679384137098,
+    "relative_ndcg_at_10_lift_pct": 0.2029705677156768,
+    "conclusion": "challenger retained in shadow mode; promotion gate not met"
+  },
+  "latency": {
+    "requests_per_cohort": 100,
+    "concurrency": 10,
+    "cached": {
+      "mean_ms": 33.41828539000744,
+      "p50_ms": 33.034401999429974,
+      "p95_ms": 60.7688849956112,
+      "p99_ms": 74.32690000041475,
+      "throughput_requests_per_second": 281.9563640443291
+    },
+    "uncached": {
+      "mean_ms": 71.58237616995393,
+      "p50_ms": 72.010789000016,
+      "p95_ms": 97.80996500012407,
+      "p99_ms": 105.5724440000245,
+      "throughput_requests_per_second": 137.51278923942795
+    },
+    "p95_cache_improvement_pct": 37.87045624698461
+  }
+}
