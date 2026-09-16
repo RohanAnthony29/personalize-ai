@@ -1,7 +1,9 @@
 services:
   redis:
     image: redis:7.4-alpine
-    command: ["redis-server", "--appendonly", "yes", "--maxmemory", "512mb", "--maxmemory-policy", "allkeys-lru"]
+    # Keep the complete validated snapshot in memory. Persistence is disabled in
+    # the free-tier demo stack to avoid duplicating millions of feature keys on disk.
+    command: ["redis-server", "--appendonly", "no", "--save", "", "--maxmemory", "3gb", "--maxmemory-policy", "noeviction"]
     volumes: ["redis-data:/data"]
     ports: ["6379:6379"]
     healthcheck:
